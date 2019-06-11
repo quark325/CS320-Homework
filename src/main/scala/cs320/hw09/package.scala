@@ -41,7 +41,7 @@ package object hw09 extends Homework09 {
         ArrowT(validType(s, typeEnv), validType(e, typeEnv))
       case IdT(x) =>
         if (typeEnv.tbinds.contains(x)) ty
-        else notype(s"$x is a free type")
+        else notype(s"$x is a free type1")
     }
 
     def typeCheck_run(corel: COREL, typeEnv: TypeEnv): Type = {
@@ -95,7 +95,7 @@ package object hw09 extends Homework09 {
             constMap.map({case (key: String, value: Type) => (key, value)}).toList match{
               case Nil => typeEnvT
               case h::t =>
-                validType(h._2, typeEnv)
+                validType(h._2, typeEnvT)
                 addVarList(constMap - h._1, typeEnvT.addVar(h._1, ArrowT(h._2, IdT(name))))
             }
           }
@@ -118,7 +118,7 @@ package object hw09 extends Homework09 {
             }
           }
 
-          val cs = typeEnv.tbinds.getOrElse(name, notype(s"$name is a free typee"))
+          val cs = typeEnv.tbinds.getOrElse(name, notype(s"$name is a free type2"))
           //cases랑, cs의 크기 비교
           if (cases.size != cs.size) {
             notype("not all cases")
@@ -232,6 +232,7 @@ package object hw09 extends Homework09 {
   }
 
   def tests: Unit = {
+    //testcase
     test(run("42"), "42")
     test(run("true"), "true")
     test(run("{+ 1 2}"), "3")
@@ -323,4 +324,109 @@ package object hw09 extends Homework09 {
 
 
   }
+  // test case for evalutaion
+
+  // basic evaluation (15)
+  test(run("42"), "42")
+  test(run("true"), "true")
+  test(run("{+ 1 2}"), "3")
+  test(run("{- 2 1}"), "1")
+  test(run("{= 1 0}"), "false")
+  test(run("{with {x : num 1} x}"), "1")
+  test(run("{fun {x : num} {+ x 1}}"), "function")
+  test(run("{fun {x : bool} {if x 0 1}}"), "function")
+  test(run("{{fun {x : bool} {if x 0 1}} true}"), "0")
+  test(run("{{fun {inc : {num -> num}} {inc 42}} {fun {x : num} {+ x 1}}}"), "43")
+  test(run("""{{recfun {f : {num -> num} x : num}
+                     {if {= x 0} 0 {+ {f {- x 1}} x}}}
+             10}"""), "55")
+  testExc(run("{= true 0}"), "")
+  testExc(run("{= {fun {x : num} x} {fun {x : num} x}}"), "")
+  testExc(run("{if 1 2 3}"), "")
+  testExc(run("{if {fun {x : num} x} 3 5}"), "")
+
+  // basic types (15)
+  test(typeCheck("42"), NumT)
+  test(typeCheck("true"), BoolT)
+  test(typeCheck("{+ 1 2}"), NumT)
+  test(typeCheck("{= 1 0}"), BoolT)
+  test(typeCheck("{fun {x : num} x}"), ArrowT(NumT, NumT))
+  test(typeCheck("{fun {x : bool} 3}"), ArrowT(BoolT, NumT))
+  test(typeCheck("{{fun {x : bool} 3} true}"), NumT)
+  test(typeCheck("{{fun {inc : {num -> num}} {inc 42}} {fun {x : num} {+ x 1}}}"), NumT)
+  test(typeCheck("{{fun {f : {{num -> bool} -> num}} 42} {fun {x : {num -> bool}} 42}}"), NumT)
+  test(typeCheck("{{fun {f : {num -> {bool -> num}}} {{f 10} false}} {fun {x : num} {fun {b : bool} x}}}"), NumT)
+  test(typeCheck("{if {= 1 2} 2 3}"), NumT)
+  testExc(typeCheck("{with {x : bool 2} x}"), "")
+  testExc(typeCheck("{if true 1 false}"), "")
+  testExc(typeCheck("{= true false}"), "")
+  testExc(typeCheck("{{fun {f : {num -> {bool -> num}}} 42} {fun {x : {num -> bool}} 42}}"), "")
+
+  // withtype / cases (20)
+  test(run("""{withtype
+              {fruit {apple num}
+                     {banana num}}
+              {cases fruit {apple 1}
+                     {apple {x} x}
+                     {banana {y} y}}}"""), "1")
+  test(run("""{withtype
+              {fruit {apple num}
+                     {banana num}}
+              {cases fruit {apple 2}
+                     {apple {x} {+ x 1}}
+                     {banana {y} {+ y 2}}}}"""), "3")
+  test(run("""{withtype
+              {fruit {apple num}
+                     {banana num}}
+              {{fun {f : {num -> fruit}} 1} apple}}"""), "1")
+  test(run("""{withtype
+              {fruit {apple num}
+                     {banana num}}
+              {{fun {f : fruit} 42} {apple 2}}}"""), "42")
+  test(run("""{withtype
+              {fruit {apple num}
+                     {banana bool}}
+              {{fun {x : fruit} 42} {banana true}}}"""), "42")
+  test(run("""{withtype
+              {fruit {apple num}
+                     {banana bool}}
+              {withtype
+                {A {a bool}}
+                {{fun {f : {fruit -> {A -> num}}} {{f {apple 42}} {a true}}}
+                 {fun {x : fruit} {fun {y : A} 13}}}}}"""), "13")
+  test(run("""{withtype {A {a bool} {b A} {c num}}
+                      1}"""), "1")
+  test(run("""{withtype {A {a bool} {b A} {c num}}
+                      {cases A {b {a true}}
+                               {a {x} 42}
+                               {b {y} 7}
+                               {c {z} z}}}"""), "7")
+  def code(x: String): String = s"""
+  {withtype {A {a bool} {b A} {c num}}
+    {{recfun {f : {A -> num} x : A}
+      {cases A x
+             {a {b} {if b 1 0}}
+             {b {a} {+ 1 {f a}}}
+             {c {n} n}}}
+     $x}}"""
+  test(run(code("{c 7}")), "7")
+  test(run(code("{b {b {c 42}}}")), "44")
+  test(run(code("{b {a false}}")), "1")
+  test(run(code("{b {b {b {b {b {a true}}}}}}")), "6")
+  test(run(code("{b {b {b {b {b {a true}}}}}}")), "6")
+  testExc(run("""{withtype
+                 {fruit {apple num}
+                        {banana bool}}
+                 {{fun {x : num} {apple x}} 42}}"""), "")
+  testExc(run("""{withtype {A {a num}} a}"""), "")
+  testExc(run("""{withtype {A {a num}} {fun {x : num} a}}"""), "")
+  testExc(run("""{withtype {A {a num}} {+ a 1}}"""), "")
+  testExc(run("""{withtype {A {a num}} {a 1}}"""), "")
+  testExc(run("""{withtype {A {a bool}} {a true}}"""), "")
+  testExc(run("""{withtype {A {a bool} {b A} {c num}} {b {a true}}}"""), "")
+  testExc(run("""{withtype
+                 {fruit {apple num}
+                        {banana num}}
+                 {cases fruit {apple 1}
+                        {apple {x} x}}}"""), "not all cases")
 }
